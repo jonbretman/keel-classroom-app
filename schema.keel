@@ -1,0 +1,81 @@
+model User {
+    fields {
+        name Text
+        identity Identity @unique
+    }
+}
+
+model Teacher {
+    fields {
+        user User @unique
+        classes Class[]
+    }
+
+    operations {
+        create createTeacher() with (user.name) {
+            @set(teacher.user.identity = ctx.identity)
+            @permission(expression: ctx.isAuthenticated)
+        }
+    }
+}
+
+model Student {
+    fields {
+        user User @unique
+        classes StudentClass[]
+    }
+
+    operations {
+        create createStudent() with (user.name) {
+            @set(student.user.identity = ctx.identity)
+            @permission(expression: ctx.isAuthenticated)
+        }
+        list classStudents(classes.class.id)
+        list teacherStudents(classes.class.teacher.id)
+    }
+
+    // A teacher can view students they teach
+    @permission(
+        expression: ctx.identity in student.classes.class.teacher.user.identity,
+        actions: [list]
+    )
+}
+
+model StudentClass {
+    fields {
+        student Student
+        class Class
+    }
+
+    operations {
+        create addStudentToClass() with (student.id, class.id) {
+            @permission(expression: studentClass.class.teacher.user.identity == ctx.identity)
+        }
+    }
+}
+
+model Class {
+    fields {
+        name Text
+        teacher Teacher
+        students StudentClass[]
+    }
+
+    operations {
+        create createClass() with (name, teacher.id)
+        list teacherClasses(teacher.id)
+        list studentClasses(students.student.id)
+    }
+
+    // A teacher can view classes they teach
+    @permission(
+        expression: class.teacher.user.identity == ctx.identity,
+        actions: [get, list, create]
+    )
+
+    // A teacher can view classes that students they teach attend
+    @permission(
+        expression: ctx.identity in class.students.student.classes.class.teacher.user.identity,
+        actions: [get, list]
+    )
+}
